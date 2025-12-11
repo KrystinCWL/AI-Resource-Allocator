@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block body %}
+
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">
+      <img src="https://cic.ndu.edu/Portals/74/CICSealWeb.png" alt="logo" />
+    </div>
+    <div>
+      <h1>CIC Course</h1>
+      <p>AI Insights</p>
+    </div>
+  </div>
+
+  <h2 class="nav-section-title">Admin Tools</h2>
+  <a class="nav-button" href="{{ url_for('admin_dashboard') }}">👥 Submitted Preferences</a>
+  <a class="nav-button" href="{{ url_for('admin_upload') }}"><span class="icon-cloud-upload"></span>Upload Files</a>
+  <a class="nav-button" href="{{ url_for('admin_schedule') }}">📋 View Schedule</a>
+  <a class="nav-button active">🔷 AI Analysis</a>
+  <a class="nav-button" href="{{ url_for('logout') }}">Logout</a>
+
+  <div class="sidebar-footer">
+    <div class="user-info">Current Semester</div>
+    <div class="username">{{ semester.semesterId if semester else '—' }}</div>
+  </div>
+</div>
+
+<div class="main-content">
+  <div class="header">
+    <div class="header-left">
+      <h2>AI Schedule Analysis</h2>
+      <p>Review coverage, workload balance, and potential risks for the selected AI-generated schedule.</p>
+    </div>
+    <div class="actions-row" style="gap:12px; align-items:center;">
+      <strong style="color:#1f2937;">{{ method_label or 'Method' }}</strong>
+      <a class="btn-primary" href="{{ url_for('admin_schedule', method=run_id) }}">⬅️ Back to Schedules</a>
+    </div>
+  </div>
+
+  <div class="content-area">
+    {% if not analysis %}
+    <div class="form-section" style="text-align:center; color:#64748b; padding: 32px;">
+      <p>No generated schedules found for analysis. Run the scheduler first from the Upload Files page.</p>
+    </div>
+    {% else %}
+    <div class="form-section" style="display:flex; gap:16px; flex-wrap:wrap;">
+      <div class="stat-card">
+        <div class="stat-label">Total Sections</div>
+        <div class="stat-value">{{ analysis.summary.total_sections }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Assigned Sections</div>
+        <div class="stat-value">{{ analysis.summary.assigned_sections }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Coverage</div>
+        <div class="stat-value">{{ analysis.summary.coverage_pct }}%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Faculty Utilized</div>
+        <div class="stat-value">{{ analysis.summary.instructor_count }}</div>
+      </div>
+    </div>
+
+    {% if analysis.notes %}
+    <div class="form-section">
+      <h3>AI Notes</h3>
+      <ul style="margin-top:12px; color:#475569;">
+        {% for note in analysis.notes %}
+        <li>{{ note }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if analysis.unassigned %}
+    <div class="form-section">
+      <h3>Sections needing attention</h3>
+      <table class="simple-table">
+        <thead>
+          <tr>
+            <th>Course</th>
+            <th>Section</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in analysis.unassigned %}
+          <tr>
+            <td>{{ row.courseId }}</td>
+            <td>{{ row.section }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <div class="form-section">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0;">Method Comparison KPIs</h3>
+          <p style="color:var(--muted); margin:4px 0 0;">Raw data feeding Gemini AI reports.</p>
+        </div>
+        <form method="post" action="{{ url_for('admin_analysis', method=run_id) }}">
+          <input type="hidden" name="action" value="generate_report">
+          <button class="btn-primary" type="submit" {% if not kpi_table_rows %}disabled{% endif %}>🔷 Generate AI Report</button>
+        </form>
+      </div>
+
+      {% if kpi_table_rows %}
+      <div class="table-wrap" style="margin-top:12px;">
+        <table class="simple-table">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              {% for header in kpi_table_headers %}
+              <th>{{ header }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in kpi_table_rows %}
+            <tr>
+              <td>{{ row.metric }}</td>
+              {% for value in row['values'] %}
+              <td>{{ value }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {# Removed raw KPI markdown block (CLI-style output) per UI cleanup request #}
+
+      {% if ai_error %}
+      <div class="badge red" style="margin-top:12px;">{{ ai_error }}</div>
+      {% endif %}
+      {% if ai_report %}
+      <div class="form-section" style="margin-top:16px; background:#f8fafc; border:1px solid #dbeafe;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+          <h3 style="margin:0;">Gemini AI Report</h3>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn-secondary" type="button" id="printReportBtn">🖨️ Print Report</button>
+            <button class="btn-secondary" type="button" id="downloadDocBtn">📄 Download as Word</button>
+          </div>
+        </div>
+        <div id="aiReportContent" style="padding:12px;">
+          <pre id="aiReportPre" style="white-space:pre-wrap; font-family:inherit; color:#1f2937; margin:0;">{{ ai_report }}</pre>
+        </div>
+      </div>
+      {% endif %}
+      {% else %}
+      <p style="color:var(--muted); margin-top:12px;">Generate the schedule to view method KPIs.</p>
+      {% endif %}
+    </div>
+
+    {% if analysis %}
+    <div class="form-section">
+      <h3 style="margin:0 0 8px 0;">Unassigned Summary</h3>
+      <p style="color:var(--muted); margin:0 0 8px 0;">
+        {{ analysis.unassigned|length }} section(s) still need an instructor.
+      </p>
+      {% if analysis.unassigned %}
+        <div class="table-wrap" style="max-height:240px; overflow:auto;">
+          <table class="simple-table">
+            <thead>
+              <tr>
+                <th>Course</th>
+                <th>Section</th>
+                <th>Title</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in analysis.unassigned %}
+              <tr>
+                <td>{{ row.courseId }}</td>
+                <td>{{ row.section }}</td>
+                <td>{{ row.courseTitle or '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p style="color:var(--muted); margin:0;">All sections are assigned for this selection.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  (function () {
+    function getReportHtml() {
+      const pre = document.getElementById('aiReportPre');
+      if (!pre) return '';
+      // Wrap in a simple HTML document with inline styling so Word/PDF capture looks reasonable
+      const style = `
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color: #111827; padding: 20px; }
+          pre { white-space: pre-wrap; font-family: inherit; font-size: 14px; }
+        </style>
+      `;
+      const header = '';
+      return `<!doctype html><html><head><meta charset="utf-8">${style}</head><body>${header}<pre>${pre.textContent}</pre></body></html>`;
+    }
+
+    function printReport() {
+      const html = getReportHtml();
+      if (!html) return alert('No AI report available to print.');
+      const w = window.open('', '_blank');
+      if (!w) return alert('Unable to open print window (popup blocked?).');
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      // Give browser a moment to render
+      setTimeout(() => {
+        try {
+          w.focus();
+          w.print();
+        } catch (e) {
+          console.error(e);
+          alert('Print failed: ' + (e && e.message ? e.message : 'unknown'));
+        }
+      }, 250);
+    }
+
+    function downloadAsDoc() {
+      const html = getReportHtml();
+      if (!html) return alert('No AI report available to download.');
+      const blob = new Blob([html], { type: 'application/msword' });
+      const url = URL.createObjectURL(blob);
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const filename = `ai_report_${yyyy}${mm}${dd}.doc`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const pbtn = document.getElementById('printReportBtn');
+      const dbtn = document.getElementById('downloadDocBtn');
+      if (pbtn) pbtn.addEventListener('click', printReport);
+      if (dbtn) dbtn.addEventListener('click', downloadAsDoc);
+    });
+  })();
+</script>
+
+{% endblock %}
